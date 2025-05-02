@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Any
 
-from circuit_tracing_llama.activation_capture.hooks import (
+from src.activation_capture.hooks import (
     register_residual_hook,
     register_mlp_hook,
     register_attn_hook,
@@ -58,7 +58,7 @@ class ActivationCapture:
 
 if __name__ == "__main__":
     # Example usage
-    from circuit_tracing_llama.model_loader.llama_loader import LlamaModelWrapper
+    from src.model_loader.llama_loader import LlamaModelWrapper
     loader = LlamaModelWrapper("meta-llama/Llama-3.2-3B-Instruct", device="cuda")
     model = loader.model
     cfg = ActivationCaptureConfig(

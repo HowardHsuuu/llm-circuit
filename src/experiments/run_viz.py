@@ -2,7 +2,7 @@ import argparse
 import os
 import json
 
-from circuit_tracing_llama.viz.graph_viz import (
+from src.viz.graph_viz import (
     build_attribution_graph,
     plot_attribution_graph
 )

@@ -3,13 +3,15 @@ import os
 import torch
 from typing import Dict, List
 
-from circuit_tracing_llama.model_loader.llama_loader import LlamaModelWrapper
-from circuit_tracing_llama.intervention.patching import (
+from src.model_loader.llama_loader import LlamaModelWrapper
+from src.intervention.patching import (
     register_residual_patch_hook,
     register_mlp_patch_hook,
     register_attn_patch_hook,
+    register_logits_patch_hook,
 )
-from circuit_tracing_llama.intervention.patching import register_logits_patch_hook
+
+from src.intervention.patching import register_logits_patch_hook
 
 def main():
     parser = argparse.ArgumentParser(

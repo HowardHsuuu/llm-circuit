@@ -19,20 +19,19 @@ def plot_attribution_graph(
     figsize: tuple[int, int] = (8, 8),
     save_path: Optional[str] = None
 ):
-    pos = nx.spring_layout(G, seed=42)  # 力导向布局 :contentReference[oaicite:0]{index=0}
+    pos = nx.spring_layout(G, seed=42)
     weights = [G[u][v]['weight'] for u, v in G.edges()]
-
-    # 归一化边宽以便可视化
     max_w = max(weights) if weights else 1.0
-    widths = [ (w / max_w) * 5 for w in weights ]  # 最大 5 pt
-
+    if max_w <= 0:
+        max_w = 1.0
+    widths = [(w / max_w) * 5 for w in weights]
     plt.figure(figsize=figsize)
     nx.draw_networkx_nodes(G, pos, node_size=600, node_color='lightblue')
     nx.draw_networkx_labels(G, pos, font_size=10)
     nx.draw_networkx_edges(
         G, pos,
         arrowstyle='->',
-        arrowsize=15,
+        arrowsize=12,
         width=widths,
         edge_color='gray',
         connectionstyle='arc3,rad=0.1'

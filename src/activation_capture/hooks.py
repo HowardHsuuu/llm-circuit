@@ -1,21 +1,30 @@
 import torch
 from torch import nn
-from typing import Callable, Dict
+from typing import Dict, Union
+
+TensorOrTuple = Union[torch.Tensor, tuple]
+
+def _unwrap_output(out: TensorOrTuple) -> torch.Tensor:
+    if isinstance(out, tuple):
+        return out[0]
+    if hasattr(out, "last_hidden_state"):
+        return out.last_hidden_state
+    return out
 
 def register_residual_hook(
     model: nn.Module,
     layer_idxs: list[int],
     activations: Dict[str, torch.Tensor],
     prefix: str = "residual"
-) -> list:
+) -> list[nn.modules.module.Module]:
     handles = []
     for i in layer_idxs:
-        block = model.transformer.h[i]
+        block = model.model.layers[i]
         name = f"{prefix}_L{i}"
         def _hook(module, inp, out, key=name):
-            activations[key] = out.detach().cpu()
-        h = block.register_forward_hook(_hook)
-        handles.append(h)
+            tensor = _unwrap_output(out)
+            activations[key] = tensor.detach().cpu()
+        handles.append(block.register_forward_hook(_hook))
     return handles
 
 def register_mlp_hook(
@@ -23,15 +32,15 @@ def register_mlp_hook(
     layer_idxs: list[int],
     activations: Dict[str, torch.Tensor],
     prefix: str = "mlp"
-) -> list:
+) -> list[nn.modules.module.Module]:
     handles = []
     for i in layer_idxs:
-        mlp = model.transformer.h[i].mlp
+        mlp = model.model.layers[i].mlp
         name = f"{prefix}_L{i}"
         def _hook(module, inp, out, key=name):
-            activations[key] = out.detach().cpu()
-        h = mlp.register_forward_hook(_hook)
-        handles.append(h)
+            tensor = _unwrap_output(out)
+            activations[key] = tensor.detach().cpu()
+        handles.append(mlp.register_forward_hook(_hook))
     return handles
 
 def register_attn_hook(
@@ -39,26 +48,25 @@ def register_attn_hook(
     layer_idxs: list[int],
     activations: Dict[str, torch.Tensor],
     prefix: str = "attn"
-) -> list:
+) -> list[nn.modules.module.Module]:
     handles = []
     for i in layer_idxs:
-        attn = model.transformer.h[i].self_attn
+        attn = model.model.layers[i].self_attn
         name = f"{prefix}_L{i}"
         def _hook(module, inp, out, key=name):
-            activations[key] = out.detach().cpu()
-        h = attn.register_forward_hook(_hook)
-        handles.append(h)
+            tensor = _unwrap_output(out)
+            activations[key] = tensor.detach().cpu()
+        handles.append(attn.register_forward_hook(_hook))
     return handles
 
 def register_logits_hook(
     model: nn.Module,
     activations: Dict[str, torch.Tensor],
     prefix: str = "logits"
-) -> Callable:
+) -> nn.modules.module.Module:
     head = model.lm_head if hasattr(model, "lm_head") else model.model.lm_head
-    name = f"{prefix}"
+    name = prefix
     def _hook(module, inp, out):
-        # out shape: (batch, seq_len, vocab_size)
-        activations[name] = out.detach().cpu()
-    handle = head.register_forward_hook(_hook)
-    return handle
+        tensor = _unwrap_output(out)
+        activations[name] = tensor.detach().cpu()
+    return head.register_forward_hook(_hook)

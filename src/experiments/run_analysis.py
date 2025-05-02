@@ -4,8 +4,8 @@ import torch
 import json
 from typing import Dict
 
-from circuit_tracing_llama.analysis.attribution import compute_importances
-from circuit_tracing_llama.analysis.prune import prune_top_k, prune_threshold
+from src.analysis.attribution import compute_importances
+from src.analysis.prune import prune_top_k, prune_threshold
 
 def main():
     parser = argparse.ArgumentParser(
