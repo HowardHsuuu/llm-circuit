@@ -1,100 +1,42 @@
-import argparse
-import os
-import torch
-from typing import Dict, List
-
+import argparse, os, torch
 from src.model_loader.llama_loader import LlamaModelWrapper
-from src.intervention.patching import (
-    register_residual_patch_hook,
-    register_mlp_patch_hook,
-    register_attn_patch_hook,
-    register_logits_patch_hook,
-)
-
-from src.intervention.patching import register_logits_patch_hook
+from src.intervention.patching import Patcher
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Run activation patching to compute logit deltas"
-    )
-    parser.add_argument(
-        "--model",
-        type=str,
-        default="meta-llama/Llama-3.2-3B-Instruct",
-        help=""
-    )
-    parser.add_argument(
-        "--device",
-        type=str,
-        default="cpu",
-        help=""
-    )
-    parser.add_argument(
-        "--prompt",
-        type=str,
-        required=True,
-        help=""
-    )
-    parser.add_argument(
-        "--layers",
-        type=int,
-        nargs="+",
-        default=None,
-        help=""
-    )
-    parser.add_argument(
-        "--acts_path",
-        type=str,
-        required=True,
-        help=""
-    )
-    parser.add_argument(
-        "--out_path",
-        type=str,
-        default="outputs/patching/patch_results.pt",
-        help=""
-    )
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model", type=str,
+                        default="meta-llama/Llama-3.2-1B-Instruct")
+    parser.add_argument("--device", type=str, default="cpu")
+    parser.add_argument("--prompt", type=str, required=True)
+    parser.add_argument("--acts_path", type=str, required=True)
+    parser.add_argument("--out_path", type=str,
+                        default="outputs/patching/patch_results.pt")
     args = parser.parse_args()
     os.makedirs(os.path.dirname(args.out_path), exist_ok=True)
-    print(f"[1/5] Loading activations from {args.acts_path}")
-    patch_values: Dict[str, torch.Tensor] = torch.load(args.acts_path)
-    print(f"[2/5] Loading model {args.model} on {args.device}...")
+    cache = torch.load(args.acts_path)
     loader = LlamaModelWrapper(args.model, device=args.device)
     model = loader.model
-    tokenizer = loader.tokenizer
-    print(f"[3/5] Computing original logits for prompt: \"{args.prompt}\"")
-    inputs = tokenizer(args.prompt, return_tensors="pt").to(args.device)
-    with torch.no_grad():
-        out = model(**inputs)
-    original_logits = out.logits[0, -1, :]
-    print("[4/5] Running patching experiments...")
-    target_pos = -1
-    components = [k for k in patch_values.keys() if k.startswith(("residual_L","mlp_L","attn_L"))]
+    logits_orig, _ = model.run_with_cache(
+        args.prompt, reset_hooks_end=True, clear_contexts=True
+    )
+    orig_logits = logits_orig[0, -1, :]
+    orig_idx = orig_logits.argmax().item()
+    patcher = Patcher(model)
+    hook_keys = [k for k in cache.keys() if k.startswith("blocks.")]
+    patch_results = {}
 
-    patch_results: Dict[str, float] = {}
+    for key in hook_keys:
+        patcher.clear()
+        patcher.apply_patches(cache, [key])
+        logits_p, _ = model.run_with_cache(
+            args.prompt, reset_hooks_end=True, clear_contexts=True
+        )
+        patched_logits = logits_p[0, -1, :]
+        delta = (patched_logits[orig_idx] - orig_logits[orig_idx]).item()
+        patch_results[key] = delta
 
-    for comp in components:
-        layer = int(comp.split("_L")[1])
-        handles = []
-        if comp.startswith("residual_L"):
-            handles = register_residual_patch_hook(model, [layer], patch_values)
-        elif comp.startswith("mlp_L"):
-            handles = register_mlp_patch_hook(model, [layer], patch_values)
-        elif comp.startswith("attn_L"):
-            handles = register_attn_patch_hook(model, [layer], patch_values)
-
-        with torch.no_grad():
-            out_p = model(**inputs)
-        patched_logits = out_p.logits[0, -1, :]
-        idx = torch.argmax(original_logits).item()
-        delta = (patched_logits[idx] - original_logits[idx]).item()
-        patch_results[comp] = delta
-        for h in handles:
-            h.remove()
-
-    print(f"[5/5] Saving patching deltas ({len(patch_results)} items) to {args.out_path}")
     torch.save(patch_results, args.out_path)
-    print("Done.")
+    print(f"[+] Saved patch results ({len(patch_results)} items) → {args.out_path}")
 
 if __name__ == "__main__":
     main()
