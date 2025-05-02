@@ -1,5 +1,4 @@
 torch>=2.0.0
-transformers>=4.30.0
-sentencepiece>=0.1.97
+transformer-lens>=0.0.1
 networkx>=2.8
 matplotlib>=3.5
