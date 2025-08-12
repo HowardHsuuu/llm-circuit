@@ -1,6 +1,10 @@
 import argparse
 import os
 import json
+import sys
+
+# Add project root to path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from src.viz.graph_viz import (
     build_attribution_graph,

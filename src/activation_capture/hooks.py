@@ -1,6 +1,8 @@
 import torch
 from torch import nn
-from typing import Dict, Union
+from typing import Dict, Union, List
+
+from src.model_loader.model_structure import ModelStructureDetector
 
 TensorOrTuple = Union[torch.Tensor, tuple]
 
@@ -13,29 +15,41 @@ def _unwrap_output(out: TensorOrTuple) -> torch.Tensor:
 
 def register_residual_hook(
     model: nn.Module,
-    layer_idxs: list[int],
+    layer_idxs: List[int],
     activations: Dict[str, torch.Tensor],
     prefix: str = "residual"
-) -> list[nn.modules.module.Module]:
+) -> List[nn.modules.module.Module]:
     handles = []
+    detector = ModelStructureDetector(model)
+    
     for i in layer_idxs:
-        block = model.model.layers[i]
+        layer = detector.get_layer(i)
+        if layer is None:
+            print(f"Warning: Could not find layer {i}")
+            continue
+            
         name = f"{prefix}_L{i}"
         def _hook(module, inp, out, key=name):
             tensor = _unwrap_output(out)
             activations[key] = tensor.detach().cpu()
-        handles.append(block.register_forward_hook(_hook))
+        handles.append(layer.register_forward_hook(_hook))
     return handles
 
 def register_mlp_hook(
     model: nn.Module,
-    layer_idxs: list[int],
+    layer_idxs: List[int],
     activations: Dict[str, torch.Tensor],
     prefix: str = "mlp"
-) -> list[nn.modules.module.Module]:
+) -> List[nn.modules.module.Module]:
     handles = []
+    detector = ModelStructureDetector(model)
+    
     for i in layer_idxs:
-        mlp = model.model.layers[i].mlp
+        mlp = detector.get_mlp(i)
+        if mlp is None:
+            print(f"Warning: Could not find MLP in layer {i}")
+            continue
+            
         name = f"{prefix}_L{i}"
         def _hook(module, inp, out, key=name):
             tensor = _unwrap_output(out)
@@ -45,13 +59,19 @@ def register_mlp_hook(
 
 def register_attn_hook(
     model: nn.Module,
-    layer_idxs: list[int],
+    layer_idxs: List[int],
     activations: Dict[str, torch.Tensor],
     prefix: str = "attn"
-) -> list[nn.modules.module.Module]:
+) -> List[nn.modules.module.Module]:
     handles = []
+    detector = ModelStructureDetector(model)
+    
     for i in layer_idxs:
-        attn = model.model.layers[i].self_attn
+        attn = detector.get_attention(i)
+        if attn is None:
+            print(f"Warning: Could not find attention in layer {i}")
+            continue
+            
         name = f"{prefix}_L{i}"
         def _hook(module, inp, out, key=name):
             tensor = _unwrap_output(out)
@@ -64,7 +84,12 @@ def register_logits_hook(
     activations: Dict[str, torch.Tensor],
     prefix: str = "logits"
 ) -> nn.modules.module.Module:
-    head = model.lm_head if hasattr(model, "lm_head") else model.model.lm_head
+    detector = ModelStructureDetector(model)
+    head = detector.get_lm_head()
+    
+    if head is None:
+        raise ValueError("Could not find language model head in the model")
+        
     name = prefix
     def _hook(module, inp, out):
         tensor = _unwrap_output(out)
